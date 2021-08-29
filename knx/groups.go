@@ -54,7 +54,24 @@ func serveGroupInbound(inbound <-chan cemi.Message, outbound chan<- GroupEvent) 
 	defer util.Log(inbound, "Worker exited")
 
 	for msg := range inbound {
-		if ind, ok := msg.(*cemi.LDataInd); ok {
+		if con, ok := msg.(*cemi.LDataCon); ok {
+			// Filter indications that do not target group addresses.
+			if !con.Control2.IsGroupAddr() {
+				util.Log(inbound, "Received L_Data.ind does not target a group address")
+				continue
+			}
+
+			if app, ok := con.Data.(*cemi.AppData); ok && app.Command.IsGroupCommand() {
+				outbound <- GroupEvent{
+					Command:     GroupCommand(app.Command),
+					Source:      con.Source,
+					Destination: cemi.GroupAddr(con.Destination),
+					Data:        app.Data,
+				}
+			} else {
+				util.Log(inbound, "Received L_Data.ind frame does not contain application data")
+			}
+		} else if ind, ok := msg.(*cemi.LDataInd); ok {
 			// Filter indications that do not target group addresses.
 			if !ind.Control2.IsGroupAddr() {
 				util.Log(inbound, "Received L_Data.ind does not target a group address")
